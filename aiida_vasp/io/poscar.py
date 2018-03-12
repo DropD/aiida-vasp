@@ -12,6 +12,8 @@ from itertools import groupby
 import numpy as np
 from py import path as py_path  # pylint: disable=no-name-in-module,no-member
 
+from aiida_vasp.io.parsevasp.poscar import ParseVaspToAiidaPoscar
+
 
 class PoscarIo(object):
     """
@@ -36,11 +38,15 @@ class PoscarIo(object):
     LATTICE_ROW_TPL = '{:{float_fmt}} {:{float_fmt}} {:{float_fmt}}'
     POS_ROW_TPL = '{:{float_fmt}} {:{float_fmt}} {:{float_fmt}} {label}'
 
-    def __init__(self, structure, precision=None):
+    def __init__(self, structure, precision=None, use_parsevasp=False):
         self.structure = structure
         self.float_format = ''
         if precision:
             self.float_format = '.{}'.format(precision)
+
+        self.use_parsevasp = use_parsevasp
+        if self.use_parsevasp:
+            self.parsevasp_converter = ParseVaspToAiidaPoscar(astructure=self.structure, comment=self.comment)
 
     def count_kinds(self):
         """
@@ -63,18 +69,26 @@ class PoscarIo(object):
 
         Accounts for lattices which have triple product < 0 by inverting lattice vectors in that case.
         """
-        cell = np.array(self.structure.cell)
-        if np.linalg.det(cell) < 0:
-            cell = cell * -1
-        comment = self.structure.label or self.structure.get_formula()
-        lattice = '\n'.join([self.LATTICE_ROW_TPL.format(*row, float_fmt=self.float_format) for row in cell])
+        lattice = '\n'.join([self.LATTICE_ROW_TPL.format(*row, float_fmt=self.float_format) for row in self.cell])
         kind_counts = ' '.join([str(count[1]) for count in self.count_kinds()])
         positions = '\n'.join([
             self.POS_ROW_TPL.format(*site.position, float_fmt=self.float_format, label=self.structure.get_kind(site.kind_name).symbol)
             for site in self.structure.sites
         ])
-        return self.POSCAR_TPL.format(comment=comment, lattice=lattice, kind_counts=kind_counts, positions=positions)
+        return self.POSCAR_TPL.format(comment=self.comment, lattice=lattice, kind_counts=kind_counts, positions=positions)
 
     def write(self, path):
         destination = py_path.local(path)
         destination.write(self.poscar_str())
+
+    @property
+    def comment(self):
+        return self.structure.label or self.structure.get_formula()
+
+    @property
+    def cell(self):
+        """The unit cell,  or -cell, if det(cell) < 0, of the structure."""
+        cell = np.array(self.structure.cell)
+        if np.linalg.det(cell) < 0:
+            cell = cell * -1
+        return cell
