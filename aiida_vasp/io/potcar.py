@@ -146,3 +146,7 @@ class MultiPotcarIo(object):
         poscario = PoscarIo(structure)
         symbol_order = poscario.potentials_order
         return cls(potcars=[potentials_dict[symbol] for symbol in symbol_order])
+
+    @property
+    def max_enmax(self):
+        return max([potcario.pymatgen.enmax for potcario in self.potcars])
